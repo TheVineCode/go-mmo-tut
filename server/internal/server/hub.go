@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"net/http"
+	"server/internal/server/objects"
 	"server/pkg/packets"
 )
 
@@ -12,6 +13,7 @@ type ClientInterfacer interface {
 	//Sets up the client's ID and anything else that needs to be initialised
 	Initialise(id uint64)
 
+	//Process a message from someone
 	ProcessMessage(senderId uint64, msg packets.Msg)
 
 	//Pump data from the connected socket directly to the client
@@ -40,7 +42,7 @@ type ClientInterfacer interface {
 //The hub is a central point of communication between all connected clients
 type Hub struct {
 	//these are all our cleints
-	Clients map[uint64]ClientInterfacer
+	Clients *objects.SharedCollection[ClientInterfacer]
 
 	//boardcast channel, holds pointers to packets that will be processed by all connected clients except the sender
 	BroadcastChan chan *packets.Packet
@@ -54,7 +56,7 @@ type Hub struct {
 
 func NewHub() *Hub {
 	return &Hub {
-		Clients: make(map[uint64]ClientInterfacer),
+		Clients: objects.NewSharedCollection[ClientInterfacer](),
 		BroadcastChan: make(chan *packets.Packet),
 		RegisterChan: make(chan ClientInterfacer),
 		UnregisterChan: make(chan ClientInterfacer),
@@ -66,22 +68,22 @@ func (h *Hub) Run() {
 	for {
 		select {
 			case client := <- h.RegisterChan:
-				client.Initialise(uint64(len(h.Clients)))
+				client.Initialise(h.Clients.Add(client))
 			case client := <- h.UnregisterChan:
-				h.Clients[client.Id()] = nil
+				h.Clients.Remove(client.Id())
 			case packet := <- h.BroadcastChan:
-				for id, client := range h.Clients {
-					if id != packet.SenderId {
+				h.Clients.ForEach(func(clientId uint64, client ClientInterfacer) {
+					if clientId != packet.SenderId {
 						client.ProcessMessage(packet.SenderId, packet.Msg)
 					}
-				}
+				})
 		}
 	}
 }
 
 //this function takes in a callback function and http items and returns a client interface and error if any
 func (h *Hub) Serve(getNewClient func(*Hub, http.ResponseWriter, *http.Request) (ClientInterfacer, error), writer http.ResponseWriter, request *http.Request ){
-	log.Println("New client connected from: ", request.RemoteAddr)
+	log.Printf("New client connected from: %s", request.RemoteAddr)
 
 	client, err := getNewClient(h, writer, request)
 

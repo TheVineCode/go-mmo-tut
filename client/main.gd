@@ -2,14 +2,27 @@ extends Node
 
 const packets := preload("res://packets.gd")
 
-# Called when the node enters the scene tree for the first time.
 func _ready() -> void:
-	var data := [8, 69, 18, 15, 10, 13, 72, 101, 108, 108, 111, 44, 32, 119, 111, 114, 108, 100, 33]
-	var packet = packets.Packet.new()
+	WS.connected_to_server.connect(_on_ws_connected_to_server)
+	WS.connection_closed.connect(_on_ws_connection_close)
+	WS.packet_received.connect(_on_ws_packet_recieved)
 	
-	packet.from_bytes(data)
-	print(packet)
+	print("Connecting to server...")
+	WS.connect_to_url("ws://127.0.0.1:8080/ws")
 
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta: float) -> void:
-	pass
+func _on_ws_connected_to_server() -> void:
+	var packet := packets.Packet.new()
+	var chat_msg := packet.new_chat()
+	chat_msg.set_msg("Hello, Golang!")
+	
+	var err := WS.send(packet)
+	if err:
+		print("Error sending packet")
+	else:
+		print("Sent packet")
+
+func _on_ws_connection_close() -> void:
+	print("connection closed")
+	
+func _on_ws_packet_recieved(packet: packets.Packet) -> void:
+	print("Recieved packets from the server: %s" % packet)

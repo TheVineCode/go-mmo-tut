@@ -19,7 +19,6 @@ func main() {
 	hub := server.NewHub()
 
 	// Define handlers for websocket connections
-	//
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		hub.Serve(clients.NewWebSocketClient, w,r)
 	})
